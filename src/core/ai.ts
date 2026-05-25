@@ -1,3 +1,5 @@
+import http from 'http';
+
 export interface AIContext {
   errorLog?: string;
   fileContent?: string;
@@ -12,26 +14,32 @@ export interface AIResponse {
   fixSuggestion: string;
 }
 
-const OLLAMA_URL = 'http://localhost:11434/api/generate';
+const OLLAMA_URL = 'http://127.0.0.1:11434/api/generate';
 const MODEL = 'mistral';
+const AI_TIMEOUT_MS = Number(process.env.DEVASSIST_AI_TIMEOUT_MS ?? 120000);
 let ollamaAvailable: boolean | null = null;
 
 async function checkOllamaAvailable(): Promise<boolean> {
   if (ollamaAvailable !== null) return ollamaAvailable;
-  try {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 3000);
-    const resp = await fetch('http://localhost:11434/api/tags', { signal: controller.signal });
-    clearTimeout(id);
-    ollamaAvailable = resp.ok;
-    return ollamaAvailable;
-  } catch {
-    ollamaAvailable = false;
-    return false;
-  }
+
+  ollamaAvailable = await new Promise<boolean>(resolve => {
+    const request = http.get('http://127.0.0.1:11434/api/tags', response => {
+      response.resume();
+      resolve(response.statusCode !== undefined && response.statusCode >= 200 && response.statusCode < 300);
+    });
+
+    request.setTimeout(1500, () => {
+      request.destroy();
+      resolve(false);
+    });
+
+    request.on('error', () => resolve(false));
+  });
+
+  return ollamaAvailable;
 }
 
-async function askAI(prompt: string): Promise<string> {
+export async function askAI(prompt: string): Promise<string> {
   const available = await checkOllamaAvailable();
   if (!available) {
     throw new Error(
@@ -46,14 +54,27 @@ async function askAI(prompt: string): Promise<string> {
 
   try {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 300000);
-    const response = await fetch(OLLAMA_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODEL, prompt, stream: false }),
-      signal: controller.signal,
-    });
-    clearTimeout(id);
+    const id = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+    let response: Response;
+
+    try {
+      response = await fetch(OLLAMA_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: MODEL,
+          prompt,
+          stream: false,
+          options: {
+            num_predict: 700,
+            temperature: 0.2,
+          },
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(id);
+    }
 
     if (!response.ok) {
       const error = await response.text();
@@ -72,6 +93,9 @@ async function askAI(prompt: string): Promise<string> {
     }
     return data.response.trim();
   } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`Ollama request timed out after ${Math.round(AI_TIMEOUT_MS / 1000)} seconds.`);
+    }
     if (err instanceof Error && err.message.includes('Ollama')) {
       throw err;
     }
@@ -101,7 +125,7 @@ export async function analyzeWithAI(context: AIContext): Promise<AIResponse> {
     promptParts.push(`Project files: ${context.projectFiles.join(', ')}`);
   }
 
-  const prompt = `Analyze the following context and provide an explanation, root cause, and fix suggestion:\n\n${promptParts.join('\n\n')}`;
+  const prompt = `Analyze the following context and provide a concise response with exactly these sections: Explanation, Root cause, Fix suggestion. Keep the total answer under 350 words.\n\n${promptParts.join('\n\n')}`;
 
   const responseText = await askAI(prompt);
 
@@ -163,7 +187,7 @@ export async function suggestFixForError(params: { errorLog?: string; filePath?:
   if (fileSnippet) promptParts.push(`Code snippet:\n${fileSnippet}`);
   if (projectRoot) promptParts.push(`Project root: ${projectRoot}`);
 
-  promptParts.push('\nTask: Propose a corrected code snippet that fixes the error described above. Return a JSON object with keys: correctedCode (the full corrected code block or replacement region), explanation (why this fixes the issue), startLine (optional), endLine (optional). Do NOT include any surrounding commentary outside the JSON.');
+  promptParts.push('\nTask: Propose a corrected code snippet that fixes the error described above. Return a compact JSON object with keys: correctedCode (replacement region only), explanation (one short paragraph), startLine (optional), endLine (optional). Do NOT include any surrounding commentary outside the JSON.');
 
   const prompt = promptParts.join('\n\n');
 

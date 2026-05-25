@@ -4,6 +4,7 @@ DevAssist is a minimal, production-oriented CLI assistant for developers. It ana
 
 Features
 - `scan`: fast project scan producing a structured JSON report
+- `ask`: ask a focused question using the configured local AI backend
 - `explain`: high-level project summary (what it does, tech stack, architecture, improvements)
 - `error`: analyze error logs or source files and suggest fixes (powered by Ollama + mistral)
 
@@ -64,6 +65,13 @@ Quick examples
 
 ```bash
 npx ts-node src/index.ts scan > project-report.json
+npx ts-node src/index.ts scan --summary
+```
+
+- Ask a focused question (uses Ollama):
+
+```bash
+npx ts-node src/index.ts ask "What does src/core/scanner.ts do?"
 ```
 
 - Explain the project (uses a fast snapshot + AI summarization):

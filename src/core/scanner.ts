@@ -17,7 +17,7 @@ export interface ProjectReport {
 }
 
 const DEFAULT_IGNORES = new Set(['node_modules', 'dist', 'build', '.git']);
-const KEY_FILES = new Set(['package.json', 'tsconfig.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'README.md']);
+const KEY_FILES = new Set(['package.json', 'tsconfig.json', 'README.md']);
 const COMMON_ENTRY_FILES = ['index.js', 'index.ts', 'src/index.ts', 'src/main.ts', 'lib/index.js'];
 
 function makeNode(absPath: string): FolderNode {

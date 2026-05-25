@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
-import { runCLI } from './cli';
+import { main } from './cli';
 
-runCLI();
+main().catch(err => {
+  console.error('Fatal error:', err);
+  process.exit(1);
+});
