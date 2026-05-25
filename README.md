@@ -97,11 +97,6 @@ Suggested improvements
 - Integrate a real AI provider with secure key storage
 ```
 
-Screenshots
-- CLI screenshot: `screenshots/cli-run.png` (placeholder)
-- Explain output: `screenshots/explain.png` (placeholder)
-
-To add screenshots, place PNG files under `screenshots/` and update the README with the images.
 
 Preparing for npm publish
 
